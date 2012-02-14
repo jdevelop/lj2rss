@@ -17,8 +17,8 @@ import Data.Maybe
 
 import Network.Curl as C
 
-readNewEntries :: Curl -> TLJConfig -> String -> IO (Maybe TLJFeed)
-readNewEntries curl cfg@(LJConfig username password lastDateCache) ljFriend = 
+readNewEntries :: TLJConfig -> String -> IO (Maybe TLJFeed)
+readNewEntries cfg@(LJConfig username password lastDateCache) ljFriend = 
   liftM ( (getNewEntries <$>) . parseLJFeed) $ getFeedContent username password feedUrl
   where
     lastReadTime = DM.lookup ljFriend lastDateCache
@@ -30,8 +30,8 @@ readNewEntries curl cfg@(LJConfig username password lastDateCache) ljFriend =
 aggregateEntries :: TLJConfig -> IO (TLJConfig, [TLJFeed])
 aggregateEntries cfg@(LJConfig username password lastDateCache) = do
  curl <- C.initialize
- !friendList <- getLJFriends curl username
- g friendList <$> mapM ( (readNewEntries curl cfg . getUsername) ) friendList
+ !friendList <- getLJFriends username
+ g friendList <$> mapM ( (readNewEntries cfg . getUsername) ) friendList
  where
   g friendList !items = go . map ( second (arr fromJust) ) . filter (isJust . snd) $ zip friendList items
   go !items = first (arr ( \x -> cfg { sessions = x } ) ) $ foldr f (lastDateCache, []) items
