@@ -4,21 +4,23 @@ module LJRSS.Aggregate where
 import LJRSS.LJTransport
 import LJRSS.LJFeed
 import LJRSS.LJEntry
-import LJRSS.LJConfig
+import qualified LJRSS.LJConfig as LJC
 import LJRSS.Friends
 import Control.Applicative ((<$>))
 import Control.Arrow (arr, first, second, (***))
 
-import Control.Monad
 import Control.Monad.Error
 
 import Data.Time
 import qualified Data.Map as DM
+import qualified Data.Set as DS
 import Data.Maybe
 
 import Network.Curl as C
 
-data TLJFeedAggregatorError = LJFeedTransportError TLJTransportError | LJFeedNotice String
+data TLJFeedAggregatorError = LJFeedTransportError TLJTransportError | 
+                              LJFeedRetryFailed TLJTransportError | 
+                              LJFeedNotice String
 
 instance Error TLJFeedAggregatorError where
  strMsg = LJFeedNotice
@@ -29,28 +31,47 @@ instance Show TLJFeedAggregatorError where
 
 type LJFeedAggregatorMonad = ErrorT TLJFeedAggregatorError IO
 
-readNewEntries :: TLJConfig -> String -> LJFeedAggregatorMonad (Maybe TLJFeed)
-readNewEntries cfg@(LJConfig username password lastDateCache) ljFriend = do
+readNewEntries :: LJC.TLJConfig -> 
+                  Int -> 
+                  Maybe TLJTransportError -> 
+                  String -> 
+                  LJFeedAggregatorMonad (Maybe TLJFeed)
+readNewEntries _ 0 (Just lastError) _ = throwError $ LJFeedRetryFailed lastError
+readNewEntries _ 0 Nothing _ = throwError $ LJFeedNotice "Wrong configuration - no retry count provided"
+readNewEntries cfg retries lastError ljFriend = do
   content <- liftIO . runErrorT $ getFeedContent username password feedUrl
   case content of
     Left fatalTransportError@(LJTransportFatal _) -> throwError $ LJFeedTransportError fatalTransportError
+    Left retryTransportError@(LJTransportRetryable _) -> readNewEntries cfg (pred retries) (Just retryTransportError) ljFriend
     Right content -> (return $!) $ ((getNewEntries <$>) . parseLJFeed)  content
     otherwise -> return Nothing
   where
-    lastReadTime = DM.lookup ljFriend lastDateCache
-    feedUrl | elem '_' ljFriend = "http://www.livejournal.com/users/" ++ ljFriend
+    username = LJC.username cfg
+    password = LJC.password cfg
+    lastDateMap = LJC.sessions cfg
+    lastReadTime = DM.lookup ljFriend lastDateMap
+    feedUrl | elem '_' ljFriend = "http://www.livejournal.com/users/" ++ ljFriend ++ "?auth=digest"
             | otherwise = "http://" ++ ljFriend ++ ".livejournal.com/data/rss?auth=digest"
-    getNewEntries feed@(LJFeed currentFeedTime entries) = maybe feed f lastReadTime
+    getNewEntries feed@(LJFeed _ currentFeedTime entries) = maybe (feed {ljUsername = ljFriend })f lastReadTime
       where
-        f lastReadTime' = LJFeed currentFeedTime $ filter ( (> lastReadTime') . ljEntryPubDate ) entries
+        f lastReadTime' = LJFeed ljFriend currentFeedTime $ filter ( (> lastReadTime') . ljEntryPubDate ) entries
 
-aggregateEntries :: TLJConfig -> LJFeedAggregatorMonad (TLJConfig, [TLJFeed])
-aggregateEntries cfg@(LJConfig username password lastDateCache) = do
- curl <- liftIO C.initialize
- !friendList <- liftIO $ getLJFriends username
- g friendList <$> mapM ( (readNewEntries cfg . getUsername) ) friendList
- where
-  g friendList !items = go . map ( second (arr fromJust) ) . filter (isJust . snd) $ zip friendList items
-  go !items = first (arr ( \x -> cfg { sessions = x } ) ) $ foldr f (lastDateCache, []) items
-  f (uName, feed@(LJFeed feedUpdateTime _)) = 
-    arr (DM.insert (getUsername uName) feedUpdateTime ) *** arr ( feed : )
+aggregateEntries :: LJC.TLJConfig -> FriendsTransformer -> LJFeedAggregatorMonad (LJC.TLJConfig, [TLJFeed])
+aggregateEntries cfg ft = do
+  liftIO C.initialize
+  friendList <- liftIO $ (ft <$> getLJFriends username)
+  g friendList <$> mapM ( (readNewEntries cfg retries Nothing . getUsername) ) friendList
+  where
+    g friendList !items = go . map ( second (arr fromJust) ) . filter (isJust . snd) $ zip friendList items
+    go !items = first (arr ( \x -> cfg { LJC.sessions = x } ) ) $ foldr f (lastDateMap, []) items
+    f (uName, feed@(LJFeed _ feedUpdateTime _)) = 
+      arr (DM.insert (getUsername uName) feedUpdateTime ) *** arr ( feed : )
+    username = LJC.username cfg
+    password = LJC.password cfg
+    lastDateMap = LJC.sessions cfg
+    retries = LJC.retryBeforeFail cfg
+
+aggregateEntriesDefaultExclude :: LJC.TLJConfig -> LJFeedAggregatorMonad (LJC.TLJConfig, [TLJFeed])
+aggregateEntriesDefaultExclude cfg = aggregateEntries cfg (filter (not . flip DS.member ignored . getUsername)) 
+  where
+    ignored = LJC.ignored cfg

@@ -10,6 +10,7 @@ import Text.Feed.Types
 import Text.RSS.Syntax
 
 data TLJFeed = LJFeed {
+  ljUsername :: String,
   ljFeedLastUpdate :: LocalTime,
   ljFeedItems :: [TLJEntry]
 } deriving (Show)
@@ -19,4 +20,4 @@ parseLJFeed src = do
   (RSSFeed rssFeedData) <- parseFeedString src
   let rssChannelData = rssChannel rssFeedData
   pubDate <- rssLastUpdate rssChannelData >>= parseLJTime
-  return . LJFeed pubDate . map fromRSSItem $ rssItems rssChannelData
+  return . LJFeed "" pubDate . map fromRSSItem $ rssItems rssChannelData

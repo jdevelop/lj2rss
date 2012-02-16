@@ -3,7 +3,9 @@ module LJRSS.Friends where
 import Network.Curl
 import Control.Monad (liftM)
 
-newtype TLJFriend = LJFriend { getUsername :: String } deriving (Show)
+newtype TLJFriend = LJFriend { getUsername :: String } deriving (Show, Eq, Ord)
+
+type FriendsTransformer = [TLJFriend] -> [TLJFriend]
 
 getLJFriends :: String -> IO [TLJFriend]
 getLJFriends username = withCurlDo $
