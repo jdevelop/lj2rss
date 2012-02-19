@@ -10,14 +10,13 @@ type UserSessions = DM.Map String LocalTime
 
 data TLJConfig = LJConfig {
   username, password :: String,
+  notificationAddress :: String,
+  notificationFromAddress :: String,
   ignored :: DS.Set String,
   networkTimeout :: Int,
   retryBeforeFail :: Int,
   sessions :: UserSessions
   } deriving (Read, Show)
-
-mkSimpleConfig :: String -> String -> TLJConfig
-mkSimpleConfig uName passwd = LJConfig uName passwd DS.empty 10 5 DM.empty
 
 appName = "ljrss"
 
