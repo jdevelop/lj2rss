@@ -18,6 +18,8 @@ import Data.Maybe
 
 import Network.Curl as C
 
+import Debug.Trace
+
 data TLJFeedAggregatorError = LJFeedTransportError TLJTransportError | 
                               LJFeedRetryFailed TLJTransportError | 
                               LJFeedNotice String
@@ -54,7 +56,9 @@ readNewEntries cfg retries lastError ljFriend = do
             | otherwise = "http://" ++ ljFriend ++ ".livejournal.com/data/rss?auth=digest"
     getNewEntries feed@(LJFeed _ currentFeedTime entries) = maybe (feed {ljUsername = ljFriend })f lastReadTime
       where
-        f lastReadTime' = LJFeed ljFriend currentFeedTime $ filter ( (> lastReadTime') . ljEntryPubDate ) entries
+        f lastReadTime' = LJFeed ljFriend currentFeedTime $ filter (filterEntries lastReadTime') entries
+        filterEntries lt Invalid = traceShow "Invalid entry detected" $ False
+        filterEntries lt entry = (> lt) $ ljEntryPubDate entry
 
 aggregateEntries :: LJC.TLJConfig -> FriendsTransformer -> LJFeedAggregatorMonad (LJC.TLJConfig, [TLJFeed])
 aggregateEntries cfg ft = do
