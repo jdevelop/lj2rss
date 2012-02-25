@@ -1,7 +1,7 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 module Main where
 
-import LJRSS.Aggregate
+import LJRSS.ConcurrentAggregate
 import LJRSS.LJConfig
 import LJRSS.LJFeed
 import LJRSS.Email
@@ -19,11 +19,12 @@ import Control.Applicative ((<$>))
 import System.Environment (getArgs)
 import System.IO
 
-data CMDOptions = Init | Update | UpdateUser String deriving (Show)
+data CMDOptions = Init | Update | Threads Int | UpdateUser String deriving (Show)
 
 options :: [OptDescr CMDOptions]
 options = [ Option ['i'] ["init"] (NoArg Init) "Initialize settings",
             Option ['r'] ["refresh"] (NoArg Update) "Update all friends",
+            Option ['t'] ["threads"] (ReqArg (Threads . read) "5") "Number of threads",
             Option ['u'] ["update"] (OptArg (UpdateUser . fromMaybe "") "USERNAME") "Update (or add) single journal" 
           ]
 
@@ -32,12 +33,12 @@ main = do
   go parsedOption
   where
     validate ([],_,_) = failWithError [] 
-    validate ([opt],_,[]) = return opt
+    validate (opts,_,[]) = return opts
     validate (_,_,errs) = failWithError errs
     failWithError errs = fail $ concat errs ++ usageInfo "Usage: ljrss [OPTION]" options
 
 
-go Init = do
+go [Init] = do
   putStrLn "Please provide LiveJournal username"
   username <- getLine
   password <- readPassword
@@ -55,7 +56,7 @@ go Init = do
   yesNo <- getLine
   if "Y" /= yesNo && "y" /= yesNo
     then do 
-      go Init
+      go [Init]
     else do 
       writeConfig $ LJConfig username password recipient sender skipList 10 5 DM.empty
       putStrLn "Configuration created, now use 'ljrss -r' to read friend feed"
@@ -92,20 +93,9 @@ go Init = do
         return password
 
 
-go Update = do
-  currentCfg <- readConfig
-  result <- runErrorT $ do
-      vals <- aggregateEntriesDefaultExclude currentCfg
-      liftIO $ notify currentCfg vals
-  case result of
-    Left err -> print err
-    Right _ -> putStrLn "Done"
-  where
-    notify currentCfg (cfg, feeds) = do 
-      mapM_ (send cfg) $ concatMap (\(LJFeed username _ feedItems) -> map ( (,) username ) feedItems ) feeds
-      writeConfig cfg
-    send cfg (journal, ljEntry) = 
-      let fromAddr = notificationFromAddress cfg
-          toAddr = notificationAddress cfg
-      in do 
-          sendMail fromAddr toAddr journal ljEntry
+go [Update, (Threads numThreads) ] = do
+  currentCfg <- readConfig 
+  newConfig <- aggregateEntriesDefaultExclude numThreads currentCfg 
+  writeConfig newConfig
+
+go _ = print $ usageInfo "Usage: ljrss [OPTION]" options

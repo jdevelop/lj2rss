@@ -5,7 +5,7 @@ import LJRSS.LJTransport
 import LJRSS.LJFeed
 import LJRSS.LJEntry
 import qualified LJRSS.LJConfig as LJC
-import LJRSS.Friends
+import LJRSS.LJFriends
 import Control.Applicative ((<$>))
 import Control.Arrow (arr, first, second, (***))
 

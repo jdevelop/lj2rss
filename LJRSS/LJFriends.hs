@@ -1,4 +1,4 @@
-module LJRSS.Friends where
+module LJRSS.LJFriends where
 
 import Network.Curl
 import Control.Monad (liftM)
