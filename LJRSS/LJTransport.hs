@@ -1,6 +1,5 @@
 module LJRSS.LJTransport where
 
-import Debug.Trace
 import Network.Curl
 import Control.Monad.Error
 
@@ -22,11 +21,11 @@ getFeedContent username password url = do
   (curlResponseCode, content) <- liftIO fetchContent
   case curlResponseCode of
     CurlOperationTimeout -> throwError $ LJTransportRetryable curlResponseCode
-    CurlOK  -> (return $!) . traceShow ("end " ++ url) $ content
+    CurlOK  -> (return $!) content
     otherwise -> throwError $ LJTransportFatal curlResponseCode
   where
     fetchContent = withCurlDo $ do
-      traceShow ("Begin: " ++ url) $ curlGetString_ url [
+      curlGetString_ url [
           CurlHttpAuth [HttpAuthDigest],
           CurlTimeout 10,
           CurlUserAgent "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:6.0a2) Gecko/20110612 Firefox/6.0a2",

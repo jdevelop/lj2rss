@@ -1,7 +1,7 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 module Main where
 
-import LJRSS.ConcurrentAggregate
+import LJRSS.ConcurrentAgregate
 import LJRSS.LJConfig
 import LJRSS.LJFeed
 import LJRSS.Email
@@ -98,4 +98,4 @@ go [Update, (Threads numThreads) ] = do
   newConfig <- aggregateEntriesDefaultExclude numThreads currentCfg 
   writeConfig newConfig
 
-go _ = print $ usageInfo "Usage: ljrss [OPTION]" options
+go _ = putStrLn $ usageInfo "Usage: ljrss [OPTION]" options
