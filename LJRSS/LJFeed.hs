@@ -15,9 +15,11 @@ data TLJFeed = LJFeed {
   ljFeedItems :: [TLJEntry]
 } deriving (Show)
 
-parseLJFeed :: String -> Maybe TLJFeed
-parseLJFeed src = do 
+parseLJFeed :: Bool -> String -> Maybe TLJFeed
+parseLJFeed skipEntries src = do 
   (RSSFeed rssFeedData) <- parseFeedString src
   let rssChannelData = rssChannel rssFeedData
   pubDate <- rssLastUpdate rssChannelData >>= parseLJTime
-  return . LJFeed "" pubDate . map fromRSSItem $ rssItems rssChannelData
+  return . LJFeed "" pubDate $ case skipEntries of
+                                  False -> map fromRSSItem $ rssItems rssChannelData
+                                  True -> []

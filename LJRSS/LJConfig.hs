@@ -15,7 +15,8 @@ data TLJConfig = LJConfig {
   ignored :: DS.Set String,
   networkTimeout :: Int,
   retryBeforeFail :: Int,
-  sessions :: UserSessions
+  sessions :: UserSessions,
+  noEntries :: Bool
   } deriving (Read, Show)
 
 appName = "ljrss"

@@ -19,11 +19,12 @@ import Control.Applicative ((<$>))
 import System.Environment (getArgs)
 import System.IO
 
-data CMDOptions = Init | Update | Threads Int | UpdateUser String deriving (Show)
+data CMDOptions = Init | Update | Snapshot | Threads Int | UpdateUser String deriving (Show)
 
 options :: [OptDescr CMDOptions]
 options = [ Option ['i'] ["init"] (NoArg Init) "Initialize settings",
             Option ['r'] ["refresh"] (NoArg Update) "Update all friends",
+            Option ['s'] ["snapshot"] (NoArg Snapshot) "Take snapshot of last post dates - no mail",
             Option ['t'] ["threads"] (ReqArg (Threads . read) "5") "Number of threads",
             Option ['u'] ["update"] (OptArg (UpdateUser . fromMaybe "") "USERNAME") "Update (or add) single journal" 
           ]
@@ -32,9 +33,9 @@ main = do
   parsedOption <- validate =<< liftM (getOpt Permute options) getArgs
   go parsedOption
   where
-    validate ([],_,_) = failWithError [] 
+    validate ([],_,_) = failWithError ["No options provided"] 
     validate (opts,_,[]) = return opts
-    validate (_,_,errs) = failWithError errs
+    validate (_,_,errs) = failWithError $ "Parse error " : errs
     failWithError errs = fail $ concat errs ++ usageInfo "Usage: ljrss [OPTION]" options
 
 
@@ -58,7 +59,7 @@ go [Init] = do
     then do 
       go [Init]
     else do 
-      writeConfig $ LJConfig username password recipient sender skipList 10 5 DM.empty
+      writeConfig $ LJConfig username password recipient sender skipList 10 5 DM.empty True
       putStrLn "Configuration created, now use 'ljrss -r' to read friend feed"
   where
     formatTextL src len = T.unpack . T.justifyLeft len ' ' $ T.pack src
@@ -93,9 +94,14 @@ go [Init] = do
         return password
 
 
-go [Update, (Threads numThreads) ] = do
+go [Update, (Threads numThreads)] = do
   currentCfg <- readConfig 
   newConfig <- aggregateEntriesDefaultExclude numThreads currentCfg 
-  writeConfig newConfig
+  writeConfig $ newConfig { noEntries = False }
+
+go [Snapshot, (Threads numThreads)] = do
+  currentCfg <- readConfig 
+  newConfig <- aggregateEntriesDefaultExclude numThreads $ currentCfg { noEntries = True }
+  writeConfig $ newConfig { noEntries = False }
 
 go _ = putStrLn $ usageInfo "Usage: ljrss [OPTION]" options
